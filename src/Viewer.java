@@ -272,12 +272,15 @@ final class GUI {
      */
     public static void scroll() {
         // scroll down when cursor reaches the bottom line and still wants to go down
-        if (cursorY - offsetY - 1 == WindowSize.rowNum) {
-            offsetY++;
+        if (cursorY >= WindowSize.rowNum + offsetY) {
+            offsetY = cursorY - WindowSize.rowNum;
         }
         // scroll up when cursor reaches the top line and still wants to go up
-        if (cursorY - offsetY == 0) {
-            offsetY--;
+        // if (cursorY - offsetY == 0) {
+        //     offsetY--;
+        // }
+        if (cursorY <= offsetY) {
+            offsetY = cursorY - 1;
         }
     }
 
@@ -329,14 +332,6 @@ final class GUI {
         builder.append("\033[H");
     }
 
-    public static void cursorEnd() {
-        cursorX = WindowSize.colNum;
-    }
-
-    public static void cursorHome() {
-        cursorX = 0;
-    }
-
     public static void cursorRight() {
         if (cursorX < WindowSize.colNum) {
             cursorX++;
@@ -364,6 +359,14 @@ final class GUI {
     public static void drawCursor() {
         // refresh cursor's position
         System.out.printf("\033[%d;%dH", cursorY - offsetY, cursorX);
+    }
+
+    public static void cursorEnd() {
+        cursorX = WindowSize.colNum;
+    }
+
+    public static void cursorHome() {
+        cursorX = 0;
     }
 
     /**
