@@ -53,6 +53,7 @@ public class Viewer {
         // GUI.refreshScreen();
 
         while (true) {
+            GUI.scroll();
             GUI.refreshScreen();
             GUI.drawCursor();
             int key = readkey();
@@ -73,7 +74,8 @@ public class Viewer {
                     // load file content
                     GUI.setContent(stream.collect(Collectors.toUnmodifiableList()));
                 } catch (IOException e) {
-                    // TODO
+                    System.out.println("\033[31mFile Open Error!\033[0m");
+                    System.exit(1);
                 }
             }
         }
@@ -240,7 +242,7 @@ final class GUI {
     /**
      * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
      */
-    private static int cursorX = 1, cursorY = 1;
+    private static int cursorX = 1, cursorY = 1, offsetY = 0;
 
     /**
      * load file content into a String List
@@ -264,9 +266,24 @@ final class GUI {
         System.out.print(builder);
     }
 
-    public static void drawStatusBar(StringBuilder builder) {
+    /**
+     * This method is calculating the offset value
+     * And the scolling effect will be rendered later
+     */
+    public static void scroll() {
+        // scroll down when cursor reaches the bottom line and still wants to go down
+        if (cursorY - offsetY - 1 == WindowSize.rowNum) {
+            offsetY++;
+        }
+        // scroll up when cursor reaches the top line and still wants to go up
+        if (cursorY - offsetY == 0) {
+            offsetY--;
+        }
+    }
+
+    private static void drawStatusBar(StringBuilder builder) {
         String editorMessage = "Domenic Zhang's Editor - Osaas";
-        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY;
+        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY + " Offset:" + offsetY;
 
         builder.append("\033[7m");
 
@@ -285,26 +302,29 @@ final class GUI {
         builder.append("\033[0m");
     }
 
-    public static void drawContent(StringBuilder builder) {
+    private static void drawContent(StringBuilder builder) {
+        int fileFirstRowToDisplay;
         for (int i = 0; i < WindowSize.rowNum; ++i) {
+            // offset is the scroll value
+            fileFirstRowToDisplay = offsetY + i;
             // only print tilde sign when we don't have enough content in the file
             // (when the file is shorter than window rows)
-            if (i >= content.size()) {
+            if (fileFirstRowToDisplay >= content.size()) {
                 builder.append("~");
             } else {
-                builder.append(content.get(i));
+                builder.append(content.get(fileFirstRowToDisplay));
             }
             // "\033[k" means clear from cursor to the end of the line
             builder.append("\033[K\r\n");
         }
     }
 
-    public static void clearScreen(StringBuilder builder) {
+    private static void clearScreen(StringBuilder builder) {
         // clear screen
         builder.append("\033[2J");
     }
 
-    public static void moveCursorToTopLeft(StringBuilder builder) {
+    private static void moveCursorToTopLeft(StringBuilder builder) {
         // place cursor to the top left corner
         builder.append("\033[H");
     }
@@ -330,7 +350,7 @@ final class GUI {
     }
 
     public static void cursorDown() {
-        if (cursorY < WindowSize.rowNum) {
+        if (cursorY < content.size()) {
             cursorY++;
         }
     }
@@ -343,7 +363,7 @@ final class GUI {
 
     public static void drawCursor() {
         // refresh cursor's position
-        System.out.printf("\033[%d;%dH", cursorY, cursorX);
+        System.out.printf("\033[%d;%dH", cursorY - offsetY, cursorX);
     }
 
     /**
