@@ -32,8 +32,6 @@ public class Viewer {
                     Platform.isMac() ? new MacOsTerminal() :
                             new UnixTerminal();
 
-    private static List<String> content = List.of();
-
     /**
      * Custom key mapping
      */
@@ -48,20 +46,14 @@ public class Viewer {
             PAGE_DOWN = 1007,
             DEL = 1008;
 
-    /**
-     * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
-     */
-    private static int cursorX = 1, cursorY = 1;
-
     public static void main(String[] args) {
 
         openFile(args);
         initEditor();
-        refreshScreen();
+        GUI.refreshScreen();
 
         while (true) {
-            // refresh cursor's position
-            System.out.printf("\033[%d;%dH", cursorY, cursorX);
+            GUI.drawCursor();
             int key = readkey();
             handlekey(key);
         }
@@ -77,8 +69,8 @@ public class Viewer {
             Path path = Path.of(fileName);
             if (Files.exists(path)) {
                 try (Stream<String> stream = Files.lines(path)) {
-                    // load file content into a String List
-                    content = stream.collect(Collectors.toUnmodifiableList());
+                    // load file content
+                    GUI.setContent(stream.collect(Collectors.toUnmodifiableList()));
                 } catch (IOException e) {
                     // TODO
                 }
@@ -98,46 +90,9 @@ public class Viewer {
     }
 
     private static void exitEditor() {
-        System.out.print("\033[2J");
-        System.out.print("\033[H");
+        GUI.exitEditor();
         terminal.disableRawMode();
         System.exit(0);
-    }
-
-    /**
-     * Refresh screen and print something (just like Vim)
-     */
-    private static void refreshScreen() {
-        StringBuilder builder = new StringBuilder();
-
-        // clear screen
-        builder.append("\033[2J");
-        // place cursor to the top left corner
-        builder.append("\033[H");
-
-        // builder.append("~\r\n".repeat(Math.max(0, WindowSize.rowNum - 1)));
-        for (int i = 0; i < WindowSize.rowNum - 1; ++i) {
-            // only print tilde sign when we don't have enough content in the file
-            // (when the file is shorter than window rows)
-            if (i >= content.size()) {
-                builder.append("~");
-            } else {
-                builder.append(content.get(i));
-            }
-            // "\033[k" means clear from cursor to the end of the line
-            builder.append("\033[K\r\n");
-        }
-
-        String statusMessage = "Domenic Zhang's Editor - Osaas";
-        builder.append("\033[7m")
-                .append(statusMessage)
-                .append(" ".repeat(Math.max(0, WindowSize.colNum - statusMessage.length())))
-                .append("\033[0m");
-
-        // replace cursor to the top left corner
-        builder.append("\033[H");
-
-        System.out.print(builder);
     }
 
     /**
@@ -247,34 +202,150 @@ public class Viewer {
     private static void moveCursor(int key) {
         switch (key) {
             case ARROW_UP:
-                if (cursorY > 1) {
-                    cursorY--;
-                }
+                GUI.cursorUp();
                 break;
             case ARROW_DOWN:
-                if (cursorY < WindowSize.rowNum - 1) {
-                    cursorY++;
-                }
+                GUI.cursorDown();
                 break;
             case ARROW_LEFT:
-                if (cursorX > 1) {
-                    cursorX--;
-                }
+                GUI.cursorLeft();
                 break;
             case ARROW_RIGHT:
-                if (cursorX < WindowSize.colNum) {
-                    cursorX++;
-                }
+                GUI.cursorRight();
                 break;
             case HOME:
-                cursorX = 0;
+                GUI.cursorHome();
                 break;
             case END:
-                cursorX = WindowSize.colNum;
+                GUI.cursorEnd();
                 break;
         }
     }
 
+}
+
+
+/**
+ * GUI Operations
+ */
+final class GUI {
+
+    /**
+     * content that will be displayed in the editor
+     */
+    private static List<String> content = List.of();
+
+    /**
+     * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
+     */
+    private static int cursorX = 1, cursorY = 1;
+
+    /**
+     * load file content into a String List
+     */
+    public static void setContent(List<String> content) {
+        GUI.content = content;
+    }
+
+    /**
+     * Refresh screen and print something (just like Vim)
+     */
+    public static void refreshScreen() {
+        StringBuilder builder = new StringBuilder();
+
+        // clearScreen(builder);
+
+        moveCursorToTopLeft(builder);
+
+        drawContent(builder);
+
+        drawStatusBar(builder);
+
+        System.out.print(builder);
+    }
+
+    /**
+     * Exit the GUI<br/>
+     * clear screen and reposition the cursor to top left corner
+     */
+    public static void exitEditor() {
+        StringBuilder builder = new StringBuilder();
+        clearScreen(builder);
+        moveCursorToTopLeft(builder);
+        System.out.print(builder);
+    }
+
+    public static void clearScreen(StringBuilder builder) {
+        // clear screen
+        builder.append("\033[2J");
+    }
+
+    public static void moveCursorToTopLeft(StringBuilder builder) {
+        // place cursor to the top left corner
+        builder.append("\033[H");
+    }
+
+    public static void drawStatusBar(StringBuilder builder) {
+        String statusMessage = "Domenic Zhang's Editor - Osaas";
+        builder.append("\033[7m")
+                .append(statusMessage)
+                .append(" ".repeat(Math.max(0, WindowSize.colNum - statusMessage.length())))
+                .append("\033[0m");
+
+        // reposition the cursor to the top left corner
+        moveCursorToTopLeft(builder);
+    }
+
+    public static void drawContent(StringBuilder builder) {
+        for (int i = 0; i < WindowSize.rowNum - 1; ++i) {
+            // only print tilde sign when we don't have enough content in the file
+            // (when the file is shorter than window rows)
+            if (i >= content.size()) {
+                builder.append("~");
+            } else {
+                builder.append(content.get(i));
+            }
+            // "\033[k" means clear from cursor to the end of the line
+            builder.append("\033[K\r\n");
+        }
+    }
+
+    public static void cursorEnd() {
+        cursorX = WindowSize.colNum;
+    }
+
+    public static void cursorHome() {
+        cursorX = 0;
+    }
+
+    public static void cursorRight() {
+        if (cursorX < WindowSize.colNum) {
+            cursorX++;
+        }
+    }
+
+    public static void cursorLeft() {
+        if (cursorX > 1) {
+            cursorX--;
+        }
+    }
+
+    public static void cursorDown() {
+        if (cursorY < WindowSize.rowNum - 1) {
+            cursorY++;
+        }
+    }
+
+    public static void cursorUp() {
+        if (cursorY > 1) {
+            cursorY--;
+        }
+    }
+
+    public static void drawCursor() {
+        // refresh cursor's position
+        System.out.printf("\033[%d;%dH", cursorY, cursorX);
+    }
 }
 
 
