@@ -56,7 +56,6 @@ public class Viewer {
     public static void main(String[] args) {
 
         openFile(args);
-
         initEditor();
         refreshScreen();
 
@@ -70,7 +69,7 @@ public class Viewer {
 
     /**
      * Open file specified in arg (only one file)
-     * @param args file argument
+     * @param args absolute path of the file
      */
     private static void openFile(String[] args) {
         if (args.length == 1) {
@@ -78,6 +77,7 @@ public class Viewer {
             Path path = Path.of(fileName);
             if (Files.exists(path)) {
                 try (Stream<String> stream = Files.lines(path)) {
+                    // load file content into a String List
                     content = stream.collect(Collectors.toUnmodifiableList());
                 } catch (IOException e) {
                     // TODO
@@ -124,7 +124,7 @@ public class Viewer {
             } else {
                 builder.append(content.get(i));
             }
-            builder.append("\r\n");
+            // "\033[k" means clear from cursor to the end of the line
             builder.append("\033[K\r\n");
         }
 
