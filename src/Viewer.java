@@ -8,7 +8,12 @@ import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.StdCallLibrary;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * @author Domenic
@@ -19,20 +24,43 @@ import java.util.Arrays;
  */
 public class Viewer {
 
+    /**
+     * Detect the OS type and choose different compatibility code
+     */
     private static final Terminal terminal =
             Platform.isWindows() ? new WindowsTerminal() :
                     Platform.isMac() ? new MacOsTerminal() :
                             new UnixTerminal();
 
-    public static void main(String[] args) throws IOException {
+    /**
+     * Custom key mapping
+     */
+    private static final int
+            ARROW_UP = 1000,
+            ARROW_DOWN = 1001,
+            ARROW_LEFT = 1002,
+            ARROW_RIGHT = 1003,
+            HOME = 1004,
+            END = 1005,
+            PAGE_UP = 1006,
+            PAGE_DOWN = 1007,
+            DEL = 1008;
+
+    /**
+     * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
+     */
+    private static int cursorX = 1, cursorY = 1;
+
+    public static void main(String[] args) {
 
         initEditor();
         refreshScreen();
 
         while (true) {
+            // refresh cursor's position
+            System.out.printf("\033[%d;%dH", cursorY, cursorX);
             int key = readkey();
             handlekey(key);
-            System.out.print((char) key + " (" + key + ")\r\n");
         }
     }
 
@@ -56,29 +84,157 @@ public class Viewer {
     private static void refreshScreen() {
         StringBuilder builder = new StringBuilder();
 
+        // clear screen
         builder.append("\033[2J");
+        // place cursor to the top left corner
         builder.append("\033[H");
 
         builder.append("~\r\n".repeat(Math.max(0, WindowSize.rowNum - 1)));
 
-        String statusMessage = "Domenic Zhang's Editor - v0.0.1";
+        String statusMessage = "Domenic Zhang's Editor - Osaas";
         builder.append("\033[7m")
                 .append(statusMessage)
                 .append(" ".repeat(Math.max(0, WindowSize.colNum - statusMessage.length())))
                 .append("\033[0m");
 
-        System.out.println(builder);
+        // replace cursor to the top left corner
+        builder.append("\033[H");
+
+        System.out.print(builder);
     }
 
-    private static int readkey() throws IOException {
-        return System.in.read();
+    /**
+     * Read input key
+     *
+     * @return key mapped number
+     */
+    private static int readkey() {
+        try {
+            int key = System.in.read();
+            // ignore escape key '\033'
+            if (key != '\033') {
+                return key;
+            }
+
+            int secondKey = System.in.read();
+            if (secondKey != '[' && secondKey != 'O') {
+                return secondKey;
+            }
+
+            int thirdKey = System.in.read();
+            // e.g. arrow_up is "esc[A", arrow_down is "esc[B"
+            if (secondKey == '[') {
+                if ('A' == thirdKey) {
+                    return ARROW_UP;
+                }
+                if ('B' == thirdKey) {
+                    return ARROW_DOWN;
+                }
+                if ('C' == thirdKey) {
+                    return ARROW_RIGHT;
+                }
+                if ('D' == thirdKey) {
+                    return ARROW_LEFT;
+                }
+                if ('H' == thirdKey) {
+                    return HOME;
+                }
+                if ('F' == thirdKey) {
+                    return END;
+                }
+                // e.g. page_up is "esc[5~"
+                if (List.of('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').contains((char) thirdKey)) {
+                    int fourthKey = System.in.read();
+                    if (fourthKey != '~') {
+                        return fourthKey;
+                    }
+                    switch (fourthKey) {
+                        case '3':
+                            return DEL;
+                        case '5':
+                            return PAGE_UP;
+                        case '6':
+                            return PAGE_DOWN;
+                        case '1':
+                        case '7':
+                            return HOME;
+                        case '4':
+                        case '8':
+                            return END;
+                        default:
+                            return thirdKey;
+                    }
+                }
+                return thirdKey;
+            } else {
+                switch (thirdKey) {
+                    // there are a multiple "HOME" & "END" because they're different in different OS
+                    case 'H':
+                        return HOME;
+                    case 'F':
+                        return END;
+                    default:
+                        return thirdKey;
+                }
+            }
+        } catch (IOException e) {
+            // print error with red color
+            System.err.println("\033[31mRead Key Error!\033[m");
+            return -1;
+        }
     }
 
+    /**
+     * Perform corresponding operation based on the input key
+     *
+     * @param key input key
+     */
     private static void handlekey(int key) {
         // press 'q' to exit
         if (key == 'q') {
             // disable raw mode after exit
             exitEditor();
+        } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END).contains(key)) {
+            moveCursor(key);
+        }
+        // else {
+        //     System.out.print((char) key + " (" + key + ")\r\n");
+        // }
+    }
+
+    /**
+     * move cursor position based on the input key
+     *
+     * @param key input key
+     */
+    private static void moveCursor(int key) {
+        switch (key) {
+            case ARROW_UP:
+                if (cursorY > 1) {
+                    cursorY--;
+                }
+                break;
+            case ARROW_DOWN:
+                if (cursorY < WindowSize.rowNum - 1) {
+                    cursorY++;
+                }
+                break;
+            case ARROW_LEFT:
+                if (cursorX > 1) {
+                    cursorX--;
+                }
+                break;
+            case ARROW_RIGHT:
+                if (cursorX < WindowSize.colNum) {
+                    cursorX++;
+                }
+                break;
+            case HOME:
+                cursorX = 0;
+                break;
+            case END:
+                cursorX = WindowSize.colNum;
+                break;
         }
     }
 
@@ -98,7 +254,6 @@ final class WindowSize {
         WindowSize.colNum = colNum;
     }
 }
-
 
 /* ========== Different Operating System Support ========== */
 
@@ -164,17 +319,16 @@ class UnixTerminal implements Terminal {
     interface LibC extends Library {
 
         int SYSTEM_OUT_FD = 0;
-        int ISIG = 1, ICANON = 2, ECHO = 10, TCSAFLUSH = 2,
-                IXON = 2000, ICRNL = 400, IEXTEN = 100000, OPOST = 1, VMIN = 6, VTIME = 5, TIOCGWINSZ = 0x5413;
+        int ISIG = 1, ICANON = 2, ECHO = 10, TCSAFLUSH = 2, IXON = 2000, ICRNL = 400,
+                IEXTEN = 100000, OPOST = 1, VMIN = 6, VTIME = 5, TIOCGWINSZ = 0x5413;
 
-        // we're loading the C standard library for POSIX systems
+        // loading the C standard library for POSIX systems
         LibC INSTANCE = Native.load("c", LibC.class);
 
         @Structure.FieldOrder(value = {"ws_row", "ws_col", "ws_xpixel", "ws_ypixel"})
         class Winsize extends Structure {
             public short ws_row, ws_col, ws_xpixel, ws_ypixel;
         }
-
 
         @Structure.FieldOrder(value = {"c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc"})
         class Termios extends Structure {
@@ -212,7 +366,6 @@ class UnixTerminal implements Terminal {
         int tcsetattr(int fd, int optional_actions, Termios termios);
 
         int ioctl(int fd, int opt, Winsize winsize) throws LastErrorException;
-
     }
 }
 
@@ -270,17 +423,16 @@ class MacOsTerminal implements Terminal {
     interface LibC extends Library {
 
         int SYSTEM_OUT_FD = 0;
-        int ISIG = 1, ICANON = 2, ECHO = 10, TCSAFLUSH = 2,
-                IXON = 2000, ICRNL = 400, IEXTEN = 100000, OPOST = 1, VMIN = 6, VTIME = 5, TIOCGWINSZ = 0x40087468;
+        int ISIG = 1, ICANON = 2, ECHO = 10, TCSAFLUSH = 2, IXON = 2000, ICRNL = 400,
+                IEXTEN = 100000, OPOST = 1, VMIN = 6, VTIME = 5, TIOCGWINSZ = 0x40087468;
 
-        // we're loading the C standard library for POSIX systems
+        // loading the C standard library for POSIX systems
         LibC INSTANCE = Native.load("c", LibC.class);
 
         @Structure.FieldOrder(value = {"ws_row", "ws_col", "ws_xpixel", "ws_ypixel"})
         class Winsize extends Structure {
             public short ws_row, ws_col, ws_xpixel, ws_ypixel;
         }
-
 
         @Structure.FieldOrder(value = {"c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc"})
         class Termios extends Structure {
@@ -318,9 +470,7 @@ class MacOsTerminal implements Terminal {
         int tcsetattr(int fd, int optional_actions, Termios termios);
 
         int ioctl(int fd, int opt, Winsize winsize) throws LastErrorException;
-
     }
-
 }
 
 /**
@@ -410,7 +560,9 @@ class WindowsTerminal implements Terminal {
          * finished using the certificate, free the certificate context by
          * calling the CertFreeCertificateContext function.
          */
-        public static final int ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004, ENABLE_PROCESSED_OUTPUT = 0x0001;
+        public static final int
+                ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004,
+                ENABLE_PROCESSED_OUTPUT = 0x0001;
 
         int ENABLE_LINE_INPUT = 0x0002;
         int ENABLE_PROCESSED_INPUT = 0x0001;
@@ -423,7 +575,6 @@ class WindowsTerminal implements Terminal {
         int ENABLE_EXTENDED_FLAGS = 0x0080;
 
         int ENABLE_VIRTUAL_TERMINAL_INPUT = 0x0200;
-
 
         int STD_OUTPUT_HANDLE = -11;
         int STD_INPUT_HANDLE = -10;
@@ -456,7 +607,6 @@ class WindowsTerminal implements Terminal {
         //   COORD      dwMaximumWindowSize;
         // } CONSOLE_SCREEN_BUFFER_INFO;
         class CONSOLE_SCREEN_BUFFER_INFO extends Structure {
-
 
             public COORD dwSize;
             public COORD dwCursorPosition;
