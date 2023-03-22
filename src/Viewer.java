@@ -50,9 +50,10 @@ public class Viewer {
 
         openFile(args);
         initEditor();
-        GUI.refreshScreen();
+        // GUI.refreshScreen();
 
         while (true) {
+            GUI.refreshScreen();
             GUI.drawCursor();
             int key = readkey();
             handlekey(key);
@@ -224,6 +225,7 @@ public class Viewer {
 
 }
 
+/* ============================== GUI =============================== */
 
 /**
  * GUI Operations
@@ -254,50 +256,37 @@ final class GUI {
         StringBuilder builder = new StringBuilder();
 
         // clearScreen(builder);
-
         moveCursorToTopLeft(builder);
-
         drawContent(builder);
-
         drawStatusBar(builder);
-
-        System.out.print(builder);
-    }
-
-    /**
-     * Exit the GUI<br/>
-     * clear screen and reposition the cursor to top left corner
-     */
-    public static void exitEditor() {
-        StringBuilder builder = new StringBuilder();
-        clearScreen(builder);
         moveCursorToTopLeft(builder);
+
         System.out.print(builder);
-    }
-
-    public static void clearScreen(StringBuilder builder) {
-        // clear screen
-        builder.append("\033[2J");
-    }
-
-    public static void moveCursorToTopLeft(StringBuilder builder) {
-        // place cursor to the top left corner
-        builder.append("\033[H");
     }
 
     public static void drawStatusBar(StringBuilder builder) {
-        String statusMessage = "Domenic Zhang's Editor - Osaas";
-        builder.append("\033[7m")
-                .append(statusMessage)
-                .append(" ".repeat(Math.max(0, WindowSize.colNum - statusMessage.length())))
-                .append("\033[0m");
+        String editorMessage = "Domenic Zhang's Editor - Osaas";
+        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY;
 
-        // reposition the cursor to the top left corner
-        moveCursorToTopLeft(builder);
+        builder.append("\033[7m");
+
+        int totalLength = info.length() + editorMessage.length();
+        // compatible with different window width
+        if (WindowSize.colNum >= totalLength + 3) {
+            // fill in spaces
+            builder.append(info)
+                    .append(" ".repeat(Math.max(3, WindowSize.colNum - totalLength)))
+                    .append(editorMessage);
+        } else {
+            // extract part of the string to fit the window width
+            builder.append(info.concat("   ").concat(editorMessage), 0, WindowSize.colNum - 3)
+                    .append("...");
+        }
+        builder.append("\033[0m");
     }
 
     public static void drawContent(StringBuilder builder) {
-        for (int i = 0; i < WindowSize.rowNum - 1; ++i) {
+        for (int i = 0; i < WindowSize.rowNum; ++i) {
             // only print tilde sign when we don't have enough content in the file
             // (when the file is shorter than window rows)
             if (i >= content.size()) {
@@ -308,6 +297,16 @@ final class GUI {
             // "\033[k" means clear from cursor to the end of the line
             builder.append("\033[K\r\n");
         }
+    }
+
+    public static void clearScreen(StringBuilder builder) {
+        // clear screen
+        builder.append("\033[2J");
+    }
+
+    public static void moveCursorToTopLeft(StringBuilder builder) {
+        // place cursor to the top left corner
+        builder.append("\033[H");
     }
 
     public static void cursorEnd() {
@@ -331,7 +330,7 @@ final class GUI {
     }
 
     public static void cursorDown() {
-        if (cursorY < WindowSize.rowNum - 1) {
+        if (cursorY < WindowSize.rowNum) {
             cursorY++;
         }
     }
@@ -346,8 +345,18 @@ final class GUI {
         // refresh cursor's position
         System.out.printf("\033[%d;%dH", cursorY, cursorX);
     }
-}
 
+    /**
+     * Exit the GUI<br/>
+     * clear screen and reposition the cursor to top left corner
+     */
+    public static void exitEditor() {
+        StringBuilder builder = new StringBuilder();
+        clearScreen(builder);
+        moveCursorToTopLeft(builder);
+        System.out.print(builder);
+    }
+}
 
 /**
  * Terminal Windows Dimensions (Column and Row)
@@ -358,12 +367,13 @@ final class WindowSize {
     public static int colNum;
 
     public static void setWindowSize(int rowNum, int colNum) {
-        WindowSize.rowNum = rowNum;
+        // -1 because we have a status bar
+        WindowSize.rowNum = rowNum - 1;
         WindowSize.colNum = colNum;
     }
 }
 
-/* ========== Different Operating System Support ========== */
+/* =============== Different Operating System Support =============== */
 
 interface Terminal {
     void enableRawMode();
