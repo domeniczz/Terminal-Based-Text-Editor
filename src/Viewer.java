@@ -32,6 +32,8 @@ public class Viewer {
                     Platform.isMac() ? new MacOsTerminal() :
                             new UnixTerminal();
 
+    private static List<String> content = List.of();
+
     /**
      * Custom key mapping
      */
@@ -53,6 +55,8 @@ public class Viewer {
 
     public static void main(String[] args) {
 
+        openFile(args);
+
         initEditor();
         refreshScreen();
 
@@ -64,11 +68,33 @@ public class Viewer {
         }
     }
 
+    /**
+     * Open file specified in arg (only one file)
+     * @param args file argument
+     */
+    private static void openFile(String[] args) {
+        if (args.length == 1) {
+            String fileName = args[0];
+            Path path = Path.of(fileName);
+            if (Files.exists(path)) {
+                try (Stream<String> stream = Files.lines(path)) {
+                    content = stream.collect(Collectors.toUnmodifiableList());
+                } catch (IOException e) {
+                    // TODO
+                }
+            }
+        }
+    }
+
     private static void initEditor() {
-        System.out.println("---- " + terminal.getClass().getName() + " ----");
         // enable terminal raw mode
         terminal.enableRawMode();
         terminal.getWindowSize();
+
+        // Print a prompt, indicating what operating system the terminal is running on
+        String className = terminal.getClass().getName();
+        int len = WindowSize.colNum >= 4 ? (WindowSize.colNum - className.length() - 2) / 2 : 0;
+        System.out.println("-".repeat(len) + " " + className + " " + "-".repeat(len));
     }
 
     private static void exitEditor() {
@@ -89,7 +115,18 @@ public class Viewer {
         // place cursor to the top left corner
         builder.append("\033[H");
 
-        builder.append("~\r\n".repeat(Math.max(0, WindowSize.rowNum - 1)));
+        // builder.append("~\r\n".repeat(Math.max(0, WindowSize.rowNum - 1)));
+        for (int i = 0; i < WindowSize.rowNum - 1; ++i) {
+            // only print tilde sign when we don't have enough content in the file
+            // (when the file is shorter than window rows)
+            if (i >= content.size()) {
+                builder.append("~");
+            } else {
+                builder.append(content.get(i));
+            }
+            builder.append("\r\n");
+            builder.append("\033[K\r\n");
+        }
 
         String statusMessage = "Domenic Zhang's Editor - Osaas";
         builder.append("\033[7m")
