@@ -47,7 +47,6 @@ public class Viewer {
             DEL = 1008;
 
     public static void main(String[] args) {
-
         openFile(args);
         initEditor();
         // GUI.refreshScreen();
@@ -189,7 +188,7 @@ public class Viewer {
         if (key == 'q') {
             // disable raw mode after exit
             exitEditor();
-        } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END).contains(key)) {
+        } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END, PAGE_UP, PAGE_DOWN).contains(key)) {
             moveCursor(key);
         }
         // else {
@@ -215,6 +214,16 @@ public class Viewer {
                 break;
             case ARROW_RIGHT:
                 GUI.cursorRight();
+                break;
+            case PAGE_UP:
+                // move cursor to top
+                GUI.moveCursorToTopOfScreen();
+                GUI.cursorUp(WindowSize.rowNum);
+                break;
+            case PAGE_DOWN:
+                // move cursor to bottom
+                GUI.moveCursorToBottomOfScreen();
+                GUI.cursorDown(WindowSize.rowNum);
                 break;
             case HOME:
                 GUI.cursorHome();
@@ -242,7 +251,7 @@ final class GUI {
     /**
      * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
      */
-    private static int cursorX = 1, cursorY = 1, offsetY = 0;
+    private static int cursorX = 1, cursorY = 1, offsetX = 0, offsetY = 0;
 
     /**
      * load file content into a String List
@@ -271,14 +280,12 @@ final class GUI {
      * And the scolling effect will be rendered later
      */
     public static void scroll() {
-        // scroll down when cursor reaches the bottom line and still wants to go down
+        /* Vertical Scrolling */
+        // scroll *down* when cursor reaches the bottom line and still going down
         if (cursorY >= WindowSize.rowNum + offsetY) {
             offsetY = cursorY - WindowSize.rowNum;
         }
-        // scroll up when cursor reaches the top line and still wants to go up
-        // if (cursorY - offsetY == 0) {
-        //     offsetY--;
-        // }
+        // scroll *up* when cursor reaches the top line and still going up
         if (cursorY <= offsetY) {
             offsetY = cursorY - 1;
         }
@@ -350,15 +357,50 @@ final class GUI {
         }
     }
 
+    public static void cursorDown(int rows) {
+        // System.out.println("\033[31mrows:" + rows + "\033[0m ");
+        if (cursorY + rows - 1 < content.size()) {
+            cursorY = cursorY + rows;
+        }
+    }
+
     public static void cursorUp() {
         if (cursorY > 1) {
             cursorY--;
         }
     }
 
+    public static void cursorUp(int rows) {
+        System.out.print("\033[31mrows:" + rows + "\033[0m ");
+        if (cursorY - rows + 1 > 1) {
+            cursorY = cursorY - rows;
+        }
+    }
+
+    /**
+     * Move the cursor to specific position
+     * @param x X-axis value (1 based)
+     * @param y Y-axis value (1 based)
+     */
+    public static void moveCursorToCoordinate(int x, int y) {
+        // move the cursor to row y, column x
+        System.out.printf("\033[%d;%dH", y, x);
+    }
+
+    public static void moveCursorToTopOfScreen() {
+        cursorY = offsetY + 1;
+    }
+
+    public static void moveCursorToBottomOfScreen() {
+        cursorY = offsetY + WindowSize.rowNum;
+    }
+
+    /**
+     * Refresh cursor's position
+     */
     public static void drawCursor() {
         // refresh cursor's position
-        System.out.printf("\033[%d;%dH", cursorY - offsetY, cursorX);
+        moveCursorToCoordinate(cursorX, cursorY - offsetY);
     }
 
     public static void cursorEnd() {
