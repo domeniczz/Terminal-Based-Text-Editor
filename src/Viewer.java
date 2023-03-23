@@ -62,6 +62,7 @@ public class Viewer {
 
     /**
      * Open file specified in arg (only one file)
+     *
      * @param args absolute path of the file
      */
     private static void openFile(String[] args) {
@@ -289,11 +290,21 @@ final class GUI {
         if (cursorY <= offsetY) {
             offsetY = cursorY - 1;
         }
+
+        /* Horizontal Scrolling */
+        // scroll *right* when cursor reaches the bottom line and still going right
+        if (cursorX >= WindowSize.colNum + offsetX) {
+            offsetX = cursorX - WindowSize.colNum;
+        }
+        // scroll *left* when cursor reaches the top line and still going left
+        if (cursorX <= offsetX) {
+            offsetX = cursorX - 1;
+        }
     }
 
     private static void drawStatusBar(StringBuilder builder) {
         String editorMessage = "Domenic Zhang's Editor - Osaas";
-        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY + " Offset:" + offsetY;
+        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY + " OffsetY:" + offsetY + " OffsetX:" + offsetX;
 
         builder.append("\033[7m");
 
@@ -313,16 +324,35 @@ final class GUI {
     }
 
     private static void drawContent(StringBuilder builder) {
-        int fileFirstRowToDisplay;
+        // fileDisplayRowNum is the line number that will display on the window
+        int fileDisplayRowNum;
         for (int i = 0; i < WindowSize.rowNum; ++i) {
-            // offset is the scroll value
-            fileFirstRowToDisplay = offsetY + i;
+            // offsetY is the scrolled value
+            fileDisplayRowNum = offsetY + i;
             // only print tilde sign when we don't have enough content in the file
             // (when the file is shorter than window rows)
-            if (fileFirstRowToDisplay >= content.size()) {
+            if (fileDisplayRowNum >= content.size()) {
                 builder.append("~");
             } else {
-                builder.append(content.get(fileFirstRowToDisplay));
+                String line = content.get(fileDisplayRowNum);
+                /*
+                 * Judge if current line is longer than window's width
+                 * if yes - truncate the line to fit
+                 * if no - display normally
+                 *
+                 * If we don't do that, terminal will automatically wrap the line,
+                 * and it will cause flickering when scroll vertically
+                 */
+                int lineLengthToDisplay = line.length() - offsetX;
+                if (lineLengthToDisplay < 0) {
+                    lineLengthToDisplay = 0;
+                }
+                if (lineLengthToDisplay > WindowSize.colNum) {
+                    lineLengthToDisplay = WindowSize.colNum;
+                }
+                if (lineLengthToDisplay > 0) {
+                    builder.append(line, offsetX, offsetX + lineLengthToDisplay);
+                }
             }
             // "\033[k" means clear from cursor to the end of the line
             builder.append("\033[K\r\n");
@@ -340,7 +370,7 @@ final class GUI {
     }
 
     public static void cursorRight() {
-        if (cursorX < WindowSize.colNum) {
+        if (cursorX < content.get(cursorY - 1).length()) {
             cursorX++;
         }
     }
@@ -379,6 +409,7 @@ final class GUI {
 
     /**
      * Move the cursor to specific position
+     *
      * @param x X-axis value (1 based)
      * @param y Y-axis value (1 based)
      */
@@ -400,7 +431,7 @@ final class GUI {
      */
     public static void drawCursor() {
         // refresh cursor's position
-        moveCursorToCoordinate(cursorX, cursorY - offsetY);
+        moveCursorToCoordinate(cursorX - offsetX, cursorY - offsetY);
     }
 
     public static void cursorEnd() {
