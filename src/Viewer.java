@@ -7,6 +7,7 @@ import com.sun.jna.Structure;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.StdCallLibrary;
 
+import java.awt.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -233,6 +234,7 @@ public class Viewer {
                 GUI.cursorEnd();
                 break;
         }
+        GUI.avoidErrorCursorPosition();
     }
 
 }
@@ -376,7 +378,8 @@ final class GUI {
     }
 
     public static void cursorRight() {
-        if (cursorX < content.get(cursorY - 1).length()) {
+        String line = currentLine();
+        if (line != null && cursorX < line.length() + 1) {
             cursorX++;
         }
     }
@@ -444,8 +447,17 @@ final class GUI {
      * Move cursor to the end of the current line
      */
     public static void cursorEnd() {
-        int len = content.get(cursorY - 1).length();
-        cursorX = len > 0 ? content.get(cursorY - 1).length() : 1;
+        String line = currentLine();
+        int len = line != null ? line.length() : 0;
+        cursorX = len > 0 ? len + 1 : 1;
+    }
+
+    /**
+     * Get the line which the cursor are now on
+     * @return if Y-axis value of the cursor >= the total lines of the content, it'll return *null*
+     */
+    public static String currentLine() {
+        return cursorY < content.size() ? content.get(cursorY - 1) : null;
     }
 
     /**
@@ -453,6 +465,18 @@ final class GUI {
      */
     public static void cursorHome() {
         cursorX = 1;
+    }
+
+    /**
+     * If the cursor is at an unexpected position, reposition it to a right place
+     */
+    public static void avoidErrorCursorPosition() {
+        // if cursor position is beyond the end of the line
+        // reposition it to the end of the line
+        String line = currentLine();
+        if (line != null && cursorX > line.length() + 1) {
+            cursorX = line.length() + 1;
+        }
     }
 
     /**
