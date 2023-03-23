@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -33,31 +34,16 @@ public class Viewer {
                     Platform.isMac() ? new MacOsTerminal() :
                             new UnixTerminal();
 
-    /**
-     * Custom key mapping
-     */
-    private static final int
-            ARROW_UP = 1000,
-            ARROW_DOWN = 1001,
-            ARROW_LEFT = 1002,
-            ARROW_RIGHT = 1003,
-            HOME = 1004,
-            END = 1005,
-            PAGE_UP = 1006,
-            PAGE_DOWN = 1007,
-            DEL = 1008;
-
     public static void main(String[] args) {
         openFile(args);
         initEditor();
-        // GUI.refreshScreen();
 
         while (true) {
-            GUI.scroll();
             GUI.refreshScreen();
-            GUI.drawCursor();
-            int key = readkey();
-            handlekey(key);
+            boolean res = Keys.handlekey();
+            if (!res) {
+                exitEditor();
+            }
         }
     }
 
@@ -99,144 +85,6 @@ public class Viewer {
         System.exit(0);
     }
 
-    /**
-     * Read input key
-     *
-     * @return key mapped number
-     */
-    private static int readkey() {
-        try {
-            int key = System.in.read();
-            // ignore escape key '\033'
-            if (key != '\033') {
-                return key;
-            }
-
-            int secondKey = System.in.read();
-            if (secondKey != '[' && secondKey != 'O') {
-                return secondKey;
-            }
-
-            int thirdKey = System.in.read();
-            // e.g. arrow_up is "esc[A", arrow_down is "esc[B"
-            if (secondKey == '[') {
-                if ('A' == thirdKey) {
-                    return ARROW_UP;
-                }
-                if ('B' == thirdKey) {
-                    return ARROW_DOWN;
-                }
-                if ('C' == thirdKey) {
-                    return ARROW_RIGHT;
-                }
-                if ('D' == thirdKey) {
-                    return ARROW_LEFT;
-                }
-                if ('H' == thirdKey) {
-                    return HOME;
-                }
-                if ('F' == thirdKey) {
-                    return END;
-                }
-                // e.g. page_up is "esc[5~"
-                if (List.of('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').contains((char) thirdKey)) {
-                    int fourthKey = System.in.read();
-                    if (fourthKey != '~') {
-                        return fourthKey;
-                    }
-                    switch (fourthKey) {
-                        case '3':
-                            return DEL;
-                        case '5':
-                            return PAGE_UP;
-                        case '6':
-                            return PAGE_DOWN;
-                        case '1':
-                        case '7':
-                            return HOME;
-                        case '4':
-                        case '8':
-                            return END;
-                        default:
-                            return thirdKey;
-                    }
-                }
-                return thirdKey;
-            } else {
-                switch (thirdKey) {
-                    // there are a multiple "HOME" & "END" because they're different in different OS
-                    case 'H':
-                        return HOME;
-                    case 'F':
-                        return END;
-                    default:
-                        return thirdKey;
-                }
-            }
-        } catch (IOException e) {
-            // print error with red color
-            System.err.println("\033[31mRead Key Error!\033[m");
-            return -1;
-        }
-    }
-
-    /**
-     * Perform corresponding operation based on the input key
-     *
-     * @param key input key
-     */
-    private static void handlekey(int key) {
-        // press 'q' to exit
-        if (key == Keys.ctrl('q')) {
-            // disable raw mode after exit
-            exitEditor();
-        } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END, PAGE_UP, PAGE_DOWN).contains(key)) {
-            moveCursor(key);
-        }
-        // else {
-        //     System.out.print((char) key + " (" + key + ")\r\n");
-        // }
-    }
-
-    /**
-     * move cursor position based on the input key
-     *
-     * @param key input key
-     */
-    private static void moveCursor(int key) {
-        switch (key) {
-            case ARROW_UP:
-                GUI.cursorUp();
-                break;
-            case ARROW_DOWN:
-                GUI.cursorDown();
-                break;
-            case ARROW_LEFT:
-                GUI.cursorLeft();
-                break;
-            case ARROW_RIGHT:
-                GUI.cursorRight();
-                break;
-            case PAGE_UP:
-                // move cursor to top
-                GUI.moveCursorToTopOfScreen();
-                GUI.cursorUp(WindowSize.rowNum);
-                break;
-            case PAGE_DOWN:
-                // move cursor to bottom
-                GUI.moveCursorToBottomOfScreen();
-                GUI.cursorDown(WindowSize.rowNum);
-                break;
-            case HOME:
-                GUI.cursorHome();
-                break;
-            case END:
-                GUI.cursorEnd();
-                break;
-        }
-        GUI.avoidErrorCursorPosition();
-    }
-
 }
 
 /* ============================== GUI =============================== */
@@ -267,22 +115,24 @@ final class GUI {
      * Refresh screen and print something (just like Vim)
      */
     public static void refreshScreen() {
-        StringBuilder builder = new StringBuilder();
+        scroll();
 
+        StringBuilder builder = new StringBuilder();
         // clearScreen(builder);
         moveCursorToTopLeft(builder);
         drawContent(builder);
         drawStatusBar(builder);
         moveCursorToTopLeft(builder);
-
         System.out.print(builder);
+
+        drawCursor();
     }
 
     /**
      * This method is calculating the offset value
      * And the scolling effect will be rendered later
      */
-    public static void scroll() {
+    private static void scroll() {
         /* Vertical Scrolling */
         // scroll *down* when cursor reaches the bottom line and still going down
         if (cursorY >= WindowSize.rowNum + offsetY) {
@@ -304,28 +154,36 @@ final class GUI {
         }
     }
 
+    private static String searchPrompt = "";
+
     /**
      * Draw the status bar at the bottom
      */
     private static void drawStatusBar(StringBuilder builder) {
-        String editorMessage = "Domenic Zhang's Editor - Osaas";
-        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/;
+        String statusBarMessage = searchPrompt.isEmpty() ? "Domenic Zhang's Editor - Osaas" : "";
+        String info = searchPrompt.isEmpty() ?
+                "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/ :
+                searchPrompt;
 
         builder.append("\033[7m");
 
-        int totalLength = info.length() + editorMessage.length();
+        int totalLength = info.length() + statusBarMessage.length();
         // compatible with different window width
         if (WindowSize.colNum >= totalLength + 3) {
             // fill in spaces
             builder.append(info)
                     .append(" ".repeat(Math.max(3, WindowSize.colNum - totalLength)))
-                    .append(editorMessage);
+                    .append(statusBarMessage);
         } else {
             // extract part of the string to fit the window width
-            builder.append(info.concat("   ").concat(editorMessage), 0, WindowSize.colNum - 3)
+            builder.append(info.concat("   ").concat(statusBarMessage), 0, WindowSize.colNum - 3)
                     .append("...");
         }
         builder.append("\033[0m");
+    }
+
+    public static void setSearchPrompt(String searchPrompt) {
+        GUI.searchPrompt = searchPrompt;
     }
 
     /**
@@ -449,9 +307,48 @@ final class GUI {
     }
 
     /**
+     * move cursor position based on the input key
+     *
+     * @param key input key
+     */
+    public static void moveCursor(int key) {
+        switch (key) {
+            case Keys.ARROW_UP:
+                cursorUp();
+                break;
+            case Keys.ARROW_DOWN:
+                cursorDown();
+                break;
+            case Keys.ARROW_LEFT:
+                cursorLeft();
+                break;
+            case Keys.ARROW_RIGHT:
+                cursorRight();
+                break;
+            case Keys.PAGE_UP:
+                // move cursor to top
+                moveCursorToTopOfScreen();
+                cursorUp(WindowSize.rowNum);
+                break;
+            case Keys.PAGE_DOWN:
+                // move cursor to bottom
+                moveCursorToBottomOfScreen();
+                cursorDown(WindowSize.rowNum);
+                break;
+            case Keys.HOME:
+                cursorHome();
+                break;
+            case Keys.END:
+                cursorEnd();
+                break;
+        }
+        GUI.avoidErrorCursorPosition();
+    }
+
+    /**
      * Refresh cursor's position
      */
-    public static void drawCursor() {
+    private static void drawCursor() {
         // refresh cursor's position
         moveCursorToCoordinate(cursorX - offsetX, cursorY - offsetY);
     }
@@ -511,12 +408,222 @@ final class GUI {
         moveCursorToTopLeft(builder);
         System.out.print(builder);
     }
+
+    /**
+     * Search direction
+     */
+    public enum SearchDirection {
+        FORWARD, BACKWARD
+    }
+
+    private static SearchDirection searchDirection = SearchDirection.FORWARD;
+    // line number (Y-axis value) of last matched word
+    private static int lastSearchMatch = -1;
+    // index number (X-axis value) of last matched word
+    private static int lastMatchIndex = 0;
+
+    /**
+     * Editor Search mode
+     */
+    public static void editorSearch() {
+        prompt((query, keyPress) -> {
+            if (query == null || query.isEmpty()) {
+                searchDirection = SearchDirection.FORWARD;
+                lastSearchMatch = -1;
+                return;
+            }
+
+            // natigate forward and backward through all the matches
+            if (keyPress == Keys.ARROW_RIGHT || keyPress == Keys.ARROW_DOWN) {
+                searchDirection = SearchDirection.FORWARD;
+            } else if (keyPress == Keys.ARROW_LEFT || keyPress == Keys.ARROW_UP) {
+                searchDirection = SearchDirection.BACKWARD;
+            } else {
+                searchDirection = SearchDirection.FORWARD;
+                lastSearchMatch = -1;
+            }
+
+            int contentSize = content.size();
+            int currentMatch = lastSearchMatch != -1 ? lastSearchMatch : 0;
+            // for loop to search match line by line
+            for (int i = 0; i < contentSize; i++) {
+                String currentLine = content.get(currentMatch);
+                int matchIndex = currentLine.indexOf(query, lastMatchIndex);
+                lastMatchIndex = matchIndex;
+
+                // if find a matchIndex
+                if (matchIndex != -1) {
+                    lastSearchMatch = currentMatch;
+                    cursorY = currentMatch + 1;
+                    cursorX = matchIndex + 1;
+                    // the value of offsetY doesn't matter as long as it's larger than cursorY,
+                    // because the `scroll()` method will set offset to the right value
+                    offsetY = contentSize;
+                    lastMatchIndex++;
+                    break;
+                } else {
+                    lastMatchIndex = 0;
+                    currentMatch += searchDirection == SearchDirection.FORWARD ? 1 : -1;
+
+                    // if arrive the last line (direction FORWARD), continue searching from the beginning
+                    if (currentMatch == contentSize) currentMatch = 0;
+                        // if arrive the first line (direction BACKWARD), continue searching from the tail
+                    else if (currentMatch == -1) currentMatch = contentSize - 1;
+                }
+            }
+        });
+    }
+
+    private static void prompt(BiConsumer<String, Integer> consumer) {
+        // the prompt will display on the status bar
+        String searchPrompt = "Search %s (Use Esc/Arrows/Enter)";
+        StringBuilder userInput = new StringBuilder();
+
+        while (true) {
+            GUI.setSearchPrompt(!userInput.toString().isEmpty() ? userInput.toString() : searchPrompt);
+            GUI.refreshScreen();
+            int key = Keys.readkey();
+            // if 'ESC' or 'ENTER', quit search mode
+            if (key == '\033' || key == '\r') {
+                GUI.setSearchPrompt("");
+                return;
+            }
+            // 'DEL', 'BACKSPACE', 'Ctrl + H' will delete one character
+            else if (key == Keys.DEL || key == 51 || key == Keys.BACKSPACE || key == Keys.ctrl('h')) {
+                if (userInput.length() > 0) {
+                    userInput.deleteCharAt(userInput.length() - 1);
+                }
+            } else if (!Character.isISOControl(key) && key < 128) {
+                userInput.append((char) key);
+            }
+
+            consumer.accept(userInput.toString(), key);
+        }
+    }
+
 }
 
 final class Keys {
 
     /**
+     * Custom key mapping
+     */
+    public static final int
+            ARROW_UP = 1000,
+            ARROW_DOWN = 1001,
+            ARROW_LEFT = 1002,
+            ARROW_RIGHT = 1003,
+            HOME = 1004,
+            END = 1005,
+            PAGE_UP = 1006,
+            PAGE_DOWN = 1007,
+            DEL = 1008,
+            BACKSPACE = 127;
+
+    /**
+     * Read input key
+     *
+     * @return key mapped number
+     */
+    public static int readkey() {
+        try {
+            int key = System.in.read();
+            // ignore escape key '\033'
+            if (key != '\033') {
+                return key;
+            }
+
+            int secondKey = System.in.read();
+            if (secondKey != '[' && secondKey != 'O') {
+                return secondKey;
+            }
+
+            int thirdKey = System.in.read();
+            // e.g. arrow_up is "esc[A", arrow_down is "esc[B"
+            if (secondKey == '[') {
+                if ('A' == thirdKey) {
+                    return ARROW_UP;
+                }
+                if ('B' == thirdKey) {
+                    return ARROW_DOWN;
+                }
+                if ('C' == thirdKey) {
+                    return ARROW_RIGHT;
+                }
+                if ('D' == thirdKey) {
+                    return ARROW_LEFT;
+                }
+                if ('H' == thirdKey) {
+                    return HOME;
+                }
+                if ('F' == thirdKey) {
+                    return END;
+                }
+                // e.g. page_up is "esc[5~"
+                if (List.of('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').contains((char) thirdKey)) {
+                    int fourthKey = System.in.read();
+                    if (fourthKey != '~') {
+                        return fourthKey;
+                    }
+                    switch (fourthKey) {
+                        case '3':
+                            return DEL;
+                        case '5':
+                            return PAGE_UP;
+                        case '6':
+                            return PAGE_DOWN;
+                        case '1':
+                        case '7':
+                            return HOME;
+                        case '4':
+                        case '8':
+                            return END;
+                        default:
+                            return thirdKey;
+                    }
+                }
+                return thirdKey;
+            } else {
+                switch (thirdKey) {
+                    // there are a multiple "HOME" & "END" because they're different in different OS
+                    case 'H':
+                        return HOME;
+                    case 'F':
+                        return END;
+                    default:
+                        return thirdKey;
+                }
+            }
+        } catch (IOException e) {
+            // print error with red color
+            System.err.println("\033[31mRead Key Error!\033[m");
+            return -1;
+        }
+    }
+
+    /**
+     * Perform corresponding operation based on the input key
+     */
+    public static boolean handlekey() {
+        int key = readkey();
+        // press 'Ctrl + Q' to exit
+        if (key == Keys.ctrl('q')) {
+            return false;
+        }
+        // press 'Ctrl + F' to search
+        else if (key == Keys.ctrl('f')) {
+            GUI.editorSearch();
+        }
+        // navigating action
+        else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END, PAGE_UP, PAGE_DOWN).contains(key)) {
+            GUI.moveCursor(key);
+        }
+        return true;
+    }
+
+    /**
      * Detect Ctrl + key combination
+     *
      * @param key combined key
      */
     public static int ctrl(char key) {
@@ -525,6 +632,7 @@ final class Keys {
 
     /**
      * Detect Shift + key combination
+     *
      * @param key combined key
      */
     public static int shift(char key) {
