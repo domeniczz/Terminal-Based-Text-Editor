@@ -7,7 +7,6 @@ import com.sun.jna.Structure;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.win32.StdCallLibrary;
 
-import java.awt.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -182,10 +181,6 @@ final class GUI {
         builder.append("\033[0m");
     }
 
-    public static void setSearchPrompt(String searchPrompt) {
-        GUI.searchPrompt = searchPrompt;
-    }
-
     /**
      * Draw file content
      */
@@ -217,7 +212,12 @@ final class GUI {
                     lineLengthToDisplay = WindowSize.colNum;
                 }
                 if (lineLengthToDisplay > 0) {
-                    builder.append(line, offsetX, offsetX + lineLengthToDisplay);
+                    if (isSearching && lastMatchIndex_Y - offsetY == i) {
+                        // in search mode: highlight matched line (same style as status bar)
+                        builder.append("\033[7m").append(line, offsetX, offsetX + lineLengthToDisplay).append("\033[0m");
+                    } else {
+                        builder.append(line, offsetX, offsetX + lineLengthToDisplay);
+                    }
                 }
             }
             // "\033[k" means clear from cursor to the end of the line
@@ -417,19 +417,21 @@ final class GUI {
     }
 
     private static SearchDirection searchDirection = SearchDirection.FORWARD;
+    private static boolean isSearching = false;
     // line number (Y-axis value) of last matched word
-    private static int lastSearchMatch = -1;
+    private static int lastMatchIndex_Y = -1;
     // index number (X-axis value) of last matched word
-    private static int lastMatchIndex = 0;
+    private static int lastMatchIndex_X = 0;
 
     /**
      * Editor Search mode
      */
     public static void editorSearch() {
+        isSearching = true;
         prompt((query, keyPress) -> {
             if (query == null || query.isEmpty()) {
                 searchDirection = SearchDirection.FORWARD;
-                lastSearchMatch = -1;
+                lastMatchIndex_Y = -1;
                 return;
             }
 
@@ -440,29 +442,29 @@ final class GUI {
                 searchDirection = SearchDirection.BACKWARD;
             } else {
                 searchDirection = SearchDirection.FORWARD;
-                lastSearchMatch = -1;
+                lastMatchIndex_Y = -1;
             }
 
             int contentSize = content.size();
-            int currentMatch = lastSearchMatch != -1 ? lastSearchMatch : 0;
+            int currentMatch = lastMatchIndex_Y != -1 ? lastMatchIndex_Y : 0;
             // for loop to search match line by line
             for (int i = 0; i < contentSize; i++) {
                 String currentLine = content.get(currentMatch);
-                int matchIndex = currentLine.indexOf(query, lastMatchIndex);
-                lastMatchIndex = matchIndex;
+                int matchIndex = currentLine.indexOf(query, lastMatchIndex_X);
+                lastMatchIndex_X = matchIndex;
 
                 // if find a matchIndex
                 if (matchIndex != -1) {
-                    lastSearchMatch = currentMatch;
+                    lastMatchIndex_Y = currentMatch;
                     cursorY = currentMatch + 1;
                     cursorX = matchIndex + 1;
                     // the value of offsetY doesn't matter as long as it's larger than cursorY,
                     // because the `scroll()` method will set offset to the right value
                     offsetY = contentSize;
-                    lastMatchIndex++;
+                    lastMatchIndex_X++;
                     break;
                 } else {
-                    lastMatchIndex = 0;
+                    lastMatchIndex_X = 0;
                     currentMatch += searchDirection == SearchDirection.FORWARD ? 1 : -1;
 
                     // if arrive the last line (direction FORWARD), continue searching from the beginning
@@ -472,6 +474,13 @@ final class GUI {
                 }
             }
         });
+        // reset all parameter value to default;
+        searchDirection = SearchDirection.FORWARD;
+        isSearching = false;
+        lastMatchIndex_Y = -1;
+        lastMatchIndex_X = 0;
+        cursorX = 1;
+        cursorY = 1;
     }
 
     private static void prompt(BiConsumer<String, Integer> consumer) {
@@ -499,6 +508,10 @@ final class GUI {
 
             consumer.accept(userInput.toString(), key);
         }
+    }
+
+    public static void setSearchPrompt(String searchPrompt) {
+        GUI.searchPrompt = searchPrompt;
     }
 
 }
