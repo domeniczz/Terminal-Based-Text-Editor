@@ -102,6 +102,7 @@ final class GUI {
      * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
      */
     private static int cursorX = 1, cursorY = 1, offsetX = 0, offsetY = 0;
+    private static int pre_cursorX = 1, pre_cursorY = 1, pre_offsetX = 0, pre_offsetY = 0;
 
     /**
      * load file content into a String List
@@ -427,6 +428,7 @@ final class GUI {
      * Editor Search mode
      */
     public static void editorSearch() {
+        storePosition();
         isSearching = true;
         prompt((query, keyPress) -> {
             if (query == null || query.isEmpty()) {
@@ -479,8 +481,7 @@ final class GUI {
         isSearching = false;
         lastMatchIndex_Y = -1;
         lastMatchIndex_X = 0;
-        cursorX = 1;
-        cursorY = 1;
+        restorePosition();
     }
 
     private static void prompt(BiConsumer<String, Integer> consumer) {
@@ -512,6 +513,26 @@ final class GUI {
 
     public static void setSearchPrompt(String searchPrompt) {
         GUI.searchPrompt = searchPrompt;
+    }
+
+    /**
+     * Store current read position before entering search mode
+     */
+    private static void storePosition() {
+        pre_cursorX = cursorX;
+        pre_cursorY = cursorY;
+        pre_offsetX = offsetX;
+        pre_offsetY = offsetY;
+    }
+
+    /**
+     * Restore current read position after existing search mode
+     */
+    private static void restorePosition() {
+        cursorX = pre_cursorX;
+        cursorY = pre_cursorY;
+        offsetX = pre_offsetX;
+        offsetY = pre_offsetY;
     }
 
 }
