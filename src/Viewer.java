@@ -382,11 +382,24 @@ final class GUI {
         if (line != null && cursorX < line.length() + 1) {
             cursorX++;
         }
+        // cursor line wrapping
+        else if (line != null && cursorX == line.length() + 1) {
+            cursorX = 1;
+            cursorY++;
+        }
     }
 
     public static void cursorLeft() {
         if (cursorX > 1) {
             cursorX--;
+        }
+        // cursor line wrapping
+        else if (cursorX == 1 && cursorY > 1) {
+            String preLine = previousLine();
+            if (preLine != null) {
+                cursorX = preLine.length() + 1;
+                cursorY--;
+            }
         }
     }
 
@@ -454,10 +467,19 @@ final class GUI {
 
     /**
      * Get the line which the cursor are now on
+     *
      * @return if Y-axis value of the cursor >= the total lines of the content, it'll return *null*
      */
     public static String currentLine() {
         return cursorY < content.size() ? content.get(cursorY - 1) : null;
+    }
+
+    public static String previousLine() {
+        if (cursorY > 1) {
+            return cursorY < content.size() ? content.get(cursorY - 2) : null;
+        } else {
+            return currentLine();
+        }
     }
 
     /**
