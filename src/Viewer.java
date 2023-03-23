@@ -302,6 +302,9 @@ final class GUI {
         }
     }
 
+    /**
+     * Draw the status bar at the bottom
+     */
     private static void drawStatusBar(StringBuilder builder) {
         String editorMessage = "Domenic Zhang's Editor - Osaas";
         String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY + " OffsetY:" + offsetY + " OffsetX:" + offsetX;
@@ -323,6 +326,9 @@ final class GUI {
         builder.append("\033[0m");
     }
 
+    /**
+     * Draw file content
+     */
     private static void drawContent(StringBuilder builder) {
         // fileDisplayRowNum is the line number that will display on the window
         int fileDisplayRowNum;
@@ -434,12 +440,19 @@ final class GUI {
         moveCursorToCoordinate(cursorX - offsetX, cursorY - offsetY);
     }
 
+    /**
+     * Move cursor to the end of the current line
+     */
     public static void cursorEnd() {
-        cursorX = WindowSize.colNum;
+        int len = content.get(cursorY - 1).length();
+        cursorX = len > 0 ? content.get(cursorY - 1).length() : 1;
     }
 
+    /**
+     * Move cursor to the beginning of the current line
+     */
     public static void cursorHome() {
-        cursorX = 0;
+        cursorX = 1;
     }
 
     /**
