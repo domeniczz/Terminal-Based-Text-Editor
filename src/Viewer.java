@@ -187,7 +187,7 @@ public class Viewer {
      */
     private static void handlekey(int key) {
         // press 'q' to exit
-        if (key == 'q') {
+        if (key == Keys.ctrl('q')) {
             // disable raw mode after exit
             exitEditor();
         } else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END, PAGE_UP, PAGE_DOWN).contains(key)) {
@@ -309,7 +309,7 @@ final class GUI {
      */
     private static void drawStatusBar(StringBuilder builder) {
         String editorMessage = "Domenic Zhang's Editor - Osaas";
-        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY + " OffsetY:" + offsetY + " OffsetX:" + offsetX;
+        String info = "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/;
 
         builder.append("\033[7m");
 
@@ -511,6 +511,26 @@ final class GUI {
         moveCursorToTopLeft(builder);
         System.out.print(builder);
     }
+}
+
+final class Keys {
+
+    /**
+     * Detect Ctrl + key combination
+     * @param key combined key
+     */
+    public static int ctrl(char key) {
+        return key & 0x1f;
+    }
+
+    /**
+     * Detect Shift + key combination
+     * @param key combined key
+     */
+    public static int shift(char key) {
+        return key & 0x5f;
+    }
+
 }
 
 /**
