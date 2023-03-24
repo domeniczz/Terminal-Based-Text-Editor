@@ -133,14 +133,28 @@ final class GUI {
      * And the scolling effect will be rendered later
      */
     private static void scroll() {
-        /* Vertical Scrolling */
-        // scroll *down* when cursor reaches the bottom line and still going down
-        if (cursorY >= WindowSize.rowNum + offsetY) {
-            offsetY = cursorY - WindowSize.rowNum;
+        if (!isSearchMode) {
+            /* Vertical Scrolling */
+            // scroll *down* when cursor reaches the bottom line and still going down
+            if (cursorY >= WindowSize.rowNum + offsetY) {
+                offsetY = cursorY - WindowSize.rowNum;
+            }
+            // scroll *up* when cursor reaches the top line and still going up
+            else if (cursorY <= offsetY) {
+                offsetY = cursorY - 1;
+            }
         }
-        // scroll *up* when cursor reaches the top line and still going up
-        if (cursorY <= offsetY) {
-            offsetY = cursorY - 1;
+        // if in search mode, display highlighted matched line in the middle of the screen
+        else {
+            /* Vertical Scrolling */
+            // scroll *down* when cursor reaches the bottom line and still going down
+            if (cursorY >= WindowSize.rowNum + offsetY) {
+                offsetY = cursorY - WindowSize.rowNum / 2;
+            }
+            // scroll *up* when cursor reaches the top line and still going up
+            else if (cursorY <= offsetY) {
+                offsetY = cursorY - 1 - WindowSize.rowNum / 2;
+            }
         }
 
         /* Horizontal Scrolling */
@@ -149,21 +163,19 @@ final class GUI {
             offsetX = cursorX - WindowSize.colNum;
         }
         // scroll *left* when cursor reaches the top line and still going left
-        if (cursorX <= offsetX) {
+        else if (cursorX <= offsetX) {
             offsetX = cursorX - 1;
         }
     }
-
-    private static String searchPrompt = "";
 
     /**
      * Draw the status bar at the bottom
      */
     private static void drawStatusBar(StringBuilder builder) {
-        String statusBarMessage = searchPrompt.isEmpty() ? "Domenic Zhang's Editor - Osaas" : "";
-        String info = searchPrompt.isEmpty() ?
+        String statusBarMessage = !isSearchMode ? "Domenic Zhang's Editor - Osaas" : "Search Mode";
+        String info = !isSearchMode ?
                 "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/ :
-                searchPrompt;
+                "[" + searchPrompt + "]";
 
         builder.append("\033[7m");
 
@@ -191,9 +203,14 @@ final class GUI {
         for (int i = 0; i < WindowSize.rowNum; ++i) {
             // offsetY is the scrolled value
             fileDisplayRowNum = offsetY + i;
-            // only print tilde sign when we don't have enough content in the file
+            // print tilde sign when we don't have enough content in the file
             // (when the file is shorter than window rows)
             if (fileDisplayRowNum >= content.size()) {
+                builder.append("~");
+            }
+            // in search mode, matched line will display in the middle
+            // if matched line is the top few lines of the file, display ~ before them
+            else if (fileDisplayRowNum < 0) {
                 builder.append("~");
             } else {
                 String line = content.get(fileDisplayRowNum);
@@ -213,7 +230,7 @@ final class GUI {
                     lineLengthToDisplay = WindowSize.colNum;
                 }
                 if (lineLengthToDisplay > 0) {
-                    if (isSearching && lastMatchIndex_Y - offsetY == i) {
+                    if (isSearchMode && lastMatchIndex_Y - offsetY == i) {
                         // in search mode: highlight matched line (same style as status bar)
                         builder.append("\033[7m").append(line, offsetX, offsetX + lineLengthToDisplay).append("\033[0m");
                     } else {
@@ -418,7 +435,7 @@ final class GUI {
     }
 
     private static SearchDirection searchDirection = SearchDirection.FORWARD;
-    private static boolean isSearching = false;
+    private static boolean isSearchMode = false;
     // line number (Y-axis value) of last matched word
     private static int lastMatchIndex_Y = -1;
     // index number (X-axis value) of last matched word
@@ -429,7 +446,7 @@ final class GUI {
      */
     public static void editorSearch() {
         storePosition();
-        isSearching = true;
+        isSearchMode = true;
         prompt((query, keyPress) -> {
             if (query == null || query.isEmpty()) {
                 searchDirection = SearchDirection.FORWARD;
@@ -478,7 +495,7 @@ final class GUI {
         });
         // reset all parameter value to default;
         searchDirection = SearchDirection.FORWARD;
-        isSearching = false;
+        isSearchMode = false;
         lastMatchIndex_Y = -1;
         lastMatchIndex_X = 0;
         restorePosition();
@@ -499,7 +516,7 @@ final class GUI {
                 return;
             }
             // 'DEL', 'BACKSPACE', 'Ctrl + H' will delete one character
-            else if (key == Keys.DEL || key == 51 || key == Keys.BACKSPACE || key == Keys.ctrl('h')) {
+            else if (key == Keys.DEL || key == Keys.BACKSPACE || key == Keys.ctrl('h')) {
                 if (userInput.length() > 0) {
                     userInput.deleteCharAt(userInput.length() - 1);
                 }
@@ -510,6 +527,8 @@ final class GUI {
             consumer.accept(userInput.toString(), key);
         }
     }
+
+    private static String searchPrompt = "";
 
     public static void setSearchPrompt(String searchPrompt) {
         GUI.searchPrompt = searchPrompt;
@@ -537,6 +556,9 @@ final class GUI {
 
 }
 
+/**
+ * Define, Read, Handle the keys
+ */
 final class Keys {
 
     /**
