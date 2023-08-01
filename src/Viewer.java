@@ -28,10 +28,8 @@ public class Viewer {
     /**
      * Detect the OS type and choose different compatibility code
      */
-    private static final Terminal terminal =
-            Platform.isWindows() ? new WindowsTerminal() :
-                    Platform.isMac() ? new MacOsTerminal() :
-                            new UnixTerminal();
+    private static final Terminal terminal = Platform.isWindows() ? new WindowsTerminal()
+            : Platform.isMac() ? new MacOsTerminal() : new UnixTerminal();
 
     public static void main(String[] args) {
         openFile(args);
@@ -173,9 +171,8 @@ final class GUI {
      */
     private static void drawStatusBar(StringBuilder builder) {
         String statusBarMessage = !isSearchMode ? "Domenic Zhang's Editor - Osaas" : "Search Mode";
-        String info = !isSearchMode ?
-                "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/ :
-                "[" + searchPrompt + "]";
+        String info = !isSearchMode ? "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY
+                /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/ : "[" + searchPrompt + "]";
 
         builder.append("\033[7m");
 
@@ -232,7 +229,8 @@ final class GUI {
                 if (lineLengthToDisplay > 0) {
                     if (isSearchMode && lastMatchIndex_Y - offsetY == i) {
                         // in search mode: highlight matched line (same style as status bar)
-                        builder.append("\033[7m").append(line, offsetX, offsetX + lineLengthToDisplay).append("\033[0m");
+                        builder.append("\033[7m").append(line, offsetX, offsetX + lineLengthToDisplay)
+                                .append("\033[0m");
                     } else {
                         builder.append(line, offsetX, offsetX + lineLengthToDisplay);
                     }
@@ -487,9 +485,13 @@ final class GUI {
                     currentMatch += searchDirection == SearchDirection.FORWARD ? 1 : -1;
 
                     // if arrive the last line (direction FORWARD), continue searching from the beginning
-                    if (currentMatch == contentSize) currentMatch = 0;
-                        // if arrive the first line (direction BACKWARD), continue searching from the tail
-                    else if (currentMatch == -1) currentMatch = contentSize - 1;
+                    if (currentMatch == contentSize) {
+                        currentMatch = 0;
+                    }
+                    // if arrive the first line (direction BACKWARD), continue searching from the tail
+                    else if (currentMatch == -1) {
+                        currentMatch = contentSize - 1;
+                    }
                 }
             }
         });
@@ -510,7 +512,7 @@ final class GUI {
             GUI.setSearchPrompt(!userInput.toString().isEmpty() ? userInput.toString() : searchPrompt);
             GUI.refreshScreen();
             int key = Keys.readkey();
-            // if 'ESC' or 'ENTER', quit search mode
+            // if 'ESC' or 'ENTER', quit search mode (in fact, 'ESC' should be pressed twice)
             if (key == '\033' || key == '\r') {
                 GUI.setSearchPrompt("");
                 return;
@@ -564,8 +566,7 @@ final class Keys {
     /**
      * Custom key mapping
      */
-    public static final int
-            ARROW_UP = 1000,
+    public static final int ARROW_UP = 1000,
             ARROW_DOWN = 1001,
             ARROW_LEFT = 1002,
             ARROW_RIGHT = 1003,
@@ -674,7 +675,15 @@ final class Keys {
         else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END, PAGE_UP, PAGE_DOWN).contains(key)) {
             GUI.moveCursor(key);
         }
+        // insert characters
+        else {
+            insertChar((char) key);
+        }
         return true;
+    }
+
+    private static void insertChar(char key) {
+
     }
 
     /**
@@ -760,7 +769,7 @@ class UnixTerminal implements Terminal {
     public void getWindowSize() {
         final LibC.Winsize winsize = new LibC.Winsize();
 
-        final int rc = LibC.INSTANCE.ioctl(LibC.SYSTEM_OUT_FD, LibC.INSTANCE.TIOCGWINSZ, winsize);
+        final int rc = LibC.INSTANCE.ioctl(LibC.SYSTEM_OUT_FD, LibC.TIOCGWINSZ, winsize);
 
         if (rc != 0) {
             System.err.println("ioctl failed with return code[={}]" + rc);
@@ -782,12 +791,12 @@ class UnixTerminal implements Terminal {
         // loading the C standard library for POSIX systems
         LibC INSTANCE = Native.load("c", LibC.class);
 
-        @Structure.FieldOrder(value = {"ws_row", "ws_col", "ws_xpixel", "ws_ypixel"})
+        @Structure.FieldOrder(value = { "ws_row", "ws_col", "ws_xpixel", "ws_ypixel" })
         class Winsize extends Structure {
             public short ws_row, ws_col, ws_xpixel, ws_ypixel;
         }
 
-        @Structure.FieldOrder(value = {"c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc"})
+        @Structure.FieldOrder(value = { "c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc" })
         class Termios extends Structure {
             public int c_iflag, c_oflag, c_cflag, c_lflag;
 
@@ -864,7 +873,7 @@ class MacOsTerminal implements Terminal {
     public void getWindowSize() {
         final LibC.Winsize winsize = new LibC.Winsize();
 
-        final int rc = LibC.INSTANCE.ioctl(LibC.SYSTEM_OUT_FD, LibC.INSTANCE.TIOCGWINSZ, winsize);
+        final int rc = LibC.INSTANCE.ioctl(LibC.SYSTEM_OUT_FD, LibC.TIOCGWINSZ, winsize);
 
         if (rc != 0) {
             System.err.println("ioctl failed with return code[={}]" + rc);
@@ -886,12 +895,12 @@ class MacOsTerminal implements Terminal {
         // loading the C standard library for POSIX systems
         LibC INSTANCE = Native.load("c", LibC.class);
 
-        @Structure.FieldOrder(value = {"ws_row", "ws_col", "ws_xpixel", "ws_ypixel"})
+        @Structure.FieldOrder(value = { "ws_row", "ws_col", "ws_xpixel", "ws_ypixel" })
         class Winsize extends Structure {
             public short ws_row, ws_col, ws_xpixel, ws_ypixel;
         }
 
-        @Structure.FieldOrder(value = {"c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc"})
+        @Structure.FieldOrder(value = { "c_iflag", "c_oflag", "c_cflag", "c_lflag", "c_cc" })
         class Termios extends Structure {
             public long c_iflag, c_oflag, c_cflag, c_lflag;
 
@@ -946,16 +955,13 @@ class WindowsTerminal implements Terminal {
         Kernel32.INSTANCE.GetConsoleMode(inHandle, inMode);
 
         int inMode;
-        inMode = this.inMode.getValue() & ~(
-                Kernel32.ENABLE_ECHO_INPUT
-                        | Kernel32.ENABLE_LINE_INPUT
-                        | Kernel32.ENABLE_MOUSE_INPUT
-                        | Kernel32.ENABLE_WINDOW_INPUT
-                        | Kernel32.ENABLE_PROCESSED_INPUT
-        );
+        inMode = this.inMode.getValue() & ~(Kernel32.ENABLE_ECHO_INPUT
+                | Kernel32.ENABLE_LINE_INPUT
+                | Kernel32.ENABLE_MOUSE_INPUT
+                | Kernel32.ENABLE_WINDOW_INPUT
+                | Kernel32.ENABLE_PROCESSED_INPUT);
 
         inMode |= Kernel32.ENABLE_VIRTUAL_TERMINAL_INPUT;
-
 
         Kernel32.INSTANCE.SetConsoleMode(inHandle, inMode);
 
@@ -1017,8 +1023,7 @@ class WindowsTerminal implements Terminal {
          * finished using the certificate, free the certificate context by
          * calling the CertFreeCertificateContext function.
          */
-        public static final int
-                ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004,
+        public static final int ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004,
                 ENABLE_PROCESSED_OUTPUT = 0x0001;
 
         int ENABLE_LINE_INPUT = 0x0002;
@@ -1071,7 +1076,8 @@ class WindowsTerminal implements Terminal {
             public SMALL_RECT srWindow;
             public COORD dwMaximumWindowSize;
 
-            private static String[] fieldOrder = {"dwSize", "dwCursorPosition", "wAttributes", "srWindow", "dwMaximumWindowSize"};
+            private static String[] fieldOrder = { "dwSize", "dwCursorPosition", "wAttributes", "srWindow",
+                    "dwMaximumWindowSize" };
 
             @Override
             protected java.util.List<String> getFieldOrder() {
@@ -1103,7 +1109,7 @@ class WindowsTerminal implements Terminal {
             public short X;
             public short Y;
 
-            private static String[] fieldOrder = {"X", "Y"};
+            private static String[] fieldOrder = { "X", "Y" };
 
             @Override
             protected java.util.List<String> getFieldOrder() {
@@ -1137,7 +1143,7 @@ class WindowsTerminal implements Terminal {
             public short Right;
             public short Bottom;
 
-            private static String[] fieldOrder = {"Left", "Top", "Right", "Bottom"};
+            private static String[] fieldOrder = { "Left", "Top", "Right", "Bottom" };
 
             @Override
             protected java.util.List<String> getFieldOrder() {

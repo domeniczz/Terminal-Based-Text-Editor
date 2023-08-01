@@ -25,6 +25,14 @@ cd <filepath>
 java -cp jna-5.13.0.jar Viewer.java <fileToOpen>
 ```
 
+## Hotkeys
+
+`Ctrl + Q` to exit editor
+
+`Ctrl + F` to enter search mode
+
+`ESC` or `ENTER` to exit search mode (`ESC` should be pressed twice)
+
 ## Thanks
 
 Thanks Marco Behler for offering free guide videos
