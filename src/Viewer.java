@@ -10,6 +10,7 @@ import com.sun.jna.win32.StdCallLibrary;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -30,6 +31,8 @@ public class Viewer {
      */
     private static final Terminal terminal = Platform.isWindows() ? new WindowsTerminal()
             : Platform.isMac() ? new MacOsTerminal() : new UnixTerminal();
+
+    public static Path currentFile;
 
     public static void main(String[] args) {
         openFile(args);
@@ -56,9 +59,18 @@ public class Viewer {
             if (Files.exists(path)) {
                 try (Stream<String> stream = Files.lines(path)) {
                     // load file content
-                    GUI.setContent(stream.collect(Collectors.toUnmodifiableList()));
+                    GUI.setContent(stream.collect(Collectors.toCollection(ArrayList::new)));
                 } catch (IOException e) {
                     System.out.println("\033[31mFile Open Error!\033[0m");
+                    System.exit(1);
+                }
+                currentFile = path;
+            } else {
+                try {
+                    currentFile = Files.createFile(path);
+                } catch (IOException e) {
+                    // e.printStackTrace();
+                    System.out.println("\033[31mFile Creation Error!\033[0m");
                     System.exit(1);
                 }
             }
@@ -94,7 +106,9 @@ final class GUI {
     /**
      * content that will be displayed in the editor
      */
-    private static List<String> content = List.of();
+    public static List<String> content = new ArrayList<>();
+
+    private static String statusBarMessage = null;
 
     /**
      * cursor coordinate (terminal coordinate is 1 based, thus, initial value is 1)
@@ -170,25 +184,46 @@ final class GUI {
      * Draw the status bar at the bottom
      */
     private static void drawStatusBar(StringBuilder builder) {
-        String statusBarMessage = !isSearchMode ? "Domenic Zhang's Editor - Osaas" : "Search Mode";
-        String info = !isSearchMode ? "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY
-                /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/ : "[" + searchPrompt + "]";
+        // display normal info
+        if (statusBarMessage == null) {
+            statusBarMessage = !isSearchMode ? "Domenic Zhang's Editor - Osaas" : "Search Mode";
+            String info = !isSearchMode ? "Rows:" + WindowSize.rowNum + " X:" + cursorX + " Y:" + cursorY
+                    /*+ " OffsetY:" + offsetY + " OffsetX:" + offsetX*/ : "[" + searchPrompt + "]";
 
-        builder.append("\033[7m");
+            builder.append("\033[7m");
 
-        int totalLength = info.length() + statusBarMessage.length();
-        // compatible with different window width
-        if (WindowSize.colNum >= totalLength + 3) {
-            // fill in spaces
-            builder.append(info)
-                    .append(" ".repeat(Math.max(3, WindowSize.colNum - totalLength)))
-                    .append(statusBarMessage);
-        } else {
-            // extract part of the string to fit the window width
-            builder.append(info.concat("   ").concat(statusBarMessage), 0, WindowSize.colNum - 3)
-                    .append("...");
+            int totalLength = info.length() + statusBarMessage.length();
+            // compatible with different window width
+            if (WindowSize.colNum >= totalLength + 3) {
+                // fill in spaces
+                builder.append(info)
+                        .append(" ".repeat(Math.max(3, WindowSize.colNum - totalLength)))
+                        .append(statusBarMessage);
+            } else {
+                // extract part of the string to fit the window width
+                builder.append(info.concat("   ").concat(statusBarMessage), 0, WindowSize.colNum - 3)
+                        .append("...");
+            }
+        }
+        // display message, for example, "successfully saved file"
+        else {
+            int totalLength = statusBarMessage.length();
+            if (WindowSize.colNum >= totalLength) {
+                builder.append("\033[7m")
+                        .append(statusBarMessage)
+                        .append(" ".repeat(Math.max(0, WindowSize.colNum - totalLength)))
+                        .append("\033[0m");
+            } else {
+                builder.append(statusBarMessage, 0, WindowSize.colNum - 3)
+                        .append("...");
+            }
         }
         builder.append("\033[0m");
+        statusBarMessage = null;
+    }
+
+    public static void setStatusBarMessage(String message) {
+        statusBarMessage = message;
     }
 
     /**
@@ -257,9 +292,14 @@ final class GUI {
             cursorX++;
         }
         // cursor line wrapping
-        else if (line != null && cursorX == line.length() + 1) {
+        else if (line != null && cursorX == line.length() + 1 && cursorY != content.size()) {
             cursorX = 1;
             cursorY++;
+        }
+        // if cursor is at the end of the last line, move to the beginning of the first line
+        else if (line != null) {
+            cursorX = 1;
+            cursorY = 1;
         }
     }
 
@@ -274,6 +314,11 @@ final class GUI {
                 cursorX = preLine.length() + 1;
                 cursorY--;
             }
+        }
+        // if cursor is at the beginning of the first line, move to the end of the last line
+        else if (cursorX == 1 && cursorY == 1) {
+            cursorY = content.size();
+            cursorX = content.get(cursorY - 1).length() + 1;
         }
     }
 
@@ -384,7 +429,7 @@ final class GUI {
      * @return if Y-axis value of the cursor >= the total lines of the content, it'll return *null*
      */
     public static String currentLine() {
-        return cursorY < content.size() ? content.get(cursorY - 1) : null;
+        return cursorY - 1 < content.size() ? content.get(cursorY - 1) : null;
     }
 
     public static String previousLine() {
@@ -556,6 +601,133 @@ final class GUI {
         offsetY = pre_offsetY;
     }
 
+    /**
+     * Insert character in the line
+     * @param character character to insert
+     */
+    public static void insertCharInLine(char character) {
+        if (cursorY - 1 < 0 || cursorY > content.size()) {
+            return;
+        }
+        // if the cursor is at the end of the file, add a new line
+        if (cursorY - 1 == content.size()) {
+            insertNewEmptyLineAt(cursorY);
+        }
+        // insert character normally
+        String lineToEdit = content.get(cursorY - 1);
+        String lineAfterEdit = new StringBuilder(lineToEdit).insert(cursorX - 1, character).toString();
+        content.set(cursorY - 1, lineAfterEdit);
+        cursorX++;
+    }
+
+    /**
+     * Insert new empty line at specified line number
+     * @param lineNumber line number
+     */
+    private static void insertNewEmptyLineAt(int lineNumber) {
+        insertNewLineAt(lineNumber, "");
+    }
+
+    /**
+     * Insert new line at specified line number
+     * @param lineNumber line number
+     * @param lineContent line content
+     */
+    private static void insertNewLineAt(int lineNumber, String lineContent) {
+        content.add(lineNumber - 1, lineContent);
+    }
+
+    /**
+     * Delete a character in the left
+     */
+    public static void deleteLeftChar() {
+        if (cursorX == 1 && cursorY == 1) {
+            return;
+        }
+        deleteLeftCharInLine();
+    }
+
+    /**
+     * Delete a character in the right
+     */
+    public static void deleteRightChar() {
+        if (cursorY - 1 == content.size() && cursorX - 1 == content.get(cursorY - 1).length()) {
+            return;
+        }
+        deleteRightCharInLine();
+    }
+
+    /**
+     * Delete a character in the line in the left of the cursor
+     */
+    private static void deleteLeftCharInLine() {
+        if (cursorX > 1) {
+            String lineToEdit = content.get(cursorY - 1);
+            String lineAfterEdit = new StringBuilder(lineToEdit).deleteCharAt(cursorX - 2).toString();
+            content.set(cursorY - 1, lineAfterEdit);
+            cursorX--;
+        } else {
+            cursorX = content.get(cursorY - 2).length() + 1;
+            appendStringToLine(cursorY - 2, content.get(cursorY - 1));
+            cursorY--;
+        }
+    }
+
+    private static void appendStringToLine(int i, String string) {
+        String previousLine = content.get(cursorY - 2);
+        String lineAfterEdit = new StringBuilder(previousLine).append(string).toString();
+        content.set(cursorY - 2, lineAfterEdit);
+        content.remove(cursorY - 1);
+    }
+
+    /**
+     * Delete a character in the line in the right of the cursor
+     */
+    private static void deleteRightCharInLine() {
+        String lineToEdit = content.get(cursorY - 1);
+        String lineAfterEdit = new StringBuilder(lineToEdit).deleteCharAt(cursorX - 1).toString();
+        content.set(cursorY - 1, lineAfterEdit);
+    }
+
+    /**
+     * handle content when 'ENTER' is pressed
+     */
+    public static void handleEnter() {
+        // cursor at the beginning of the line
+        if (cursorX - 1 == 0) {
+            insertNewEmptyLineAt(cursorY);
+        }
+        // cursor at the end of the line
+        else if (cursorX - 1 == content.get(cursorY - 1).length()) {
+            insertNewEmptyLineAt(cursorY + 1);
+            cursorX = 1;
+        } else {
+            String line = content.get(cursorY - 1);
+            String formerPart = line.substring(0, cursorX - 1);
+            String latterPart = line.substring(cursorX - 1);
+            content.set(cursorY - 1, formerPart);
+            content.add(cursorY, latterPart);
+            cursorX = 1;
+        }
+        cursorY++;
+    }
+
+    /**
+     * Save file
+     */
+    public static void saveFile() {
+        if (Viewer.currentFile == null) {
+            return;
+        }
+        try {
+            Files.write(Viewer.currentFile, GUI.content);
+            GUI.setStatusBarMessage("Successfully saved file");
+        } catch (IOException e) {
+            e.printStackTrace();
+            GUI.setStatusBarMessage("There was an error saving your file");
+        }
+    }
+
 }
 
 /**
@@ -579,7 +751,6 @@ final class Keys {
 
     /**
      * Read input key
-     *
      * @return key mapped number
      */
     public static int readkey() {
@@ -600,41 +771,36 @@ final class Keys {
             if (secondKey == '[') {
                 if ('A' == thirdKey) {
                     return ARROW_UP;
-                }
-                if ('B' == thirdKey) {
+                } else if ('B' == thirdKey) {
                     return ARROW_DOWN;
-                }
-                if ('C' == thirdKey) {
+                } else if ('C' == thirdKey) {
                     return ARROW_RIGHT;
-                }
-                if ('D' == thirdKey) {
+                } else if ('D' == thirdKey) {
                     return ARROW_LEFT;
-                }
-                if ('H' == thirdKey) {
+                } else if ('H' == thirdKey) {
                     return HOME;
-                }
-                if ('F' == thirdKey) {
+                } else if ('F' == thirdKey) {
                     return END;
                 }
                 // e.g. page_up is "esc[5~"
-                if (List.of('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').contains((char) thirdKey)) {
+                else if (List.of('0', '1', '2', '3', '4', '5', '6', '7', '8', '9').contains((char) thirdKey)) {
                     int fourthKey = System.in.read();
                     if (fourthKey != '~') {
                         return fourthKey;
                     }
                     switch (fourthKey) {
+                        case '1':
+                        case '7':
+                            return HOME;
                         case '3':
                             return DEL;
+                        case '4':
+                        case '8':
+                            return END;
                         case '5':
                             return PAGE_UP;
                         case '6':
                             return PAGE_DOWN;
-                        case '1':
-                        case '7':
-                            return HOME;
-                        case '4':
-                        case '8':
-                            return END;
                         default:
                             return thirdKey;
                     }
@@ -664,16 +830,32 @@ final class Keys {
     public static boolean handlekey() {
         int key = readkey();
         // press 'Ctrl + Q' to exit
-        if (key == Keys.ctrl('q')) {
+        if (key == ctrl('q')) {
             return false;
         }
         // press 'Ctrl + F' to search
-        else if (key == Keys.ctrl('f')) {
+        else if (key == ctrl('f')) {
             GUI.editorSearch();
+        }
+        // press 'Ctrl + S' to save
+        else if (key == ctrl('s')) {
+            GUI.saveFile();
         }
         // navigating action
         else if (List.of(ARROW_UP, ARROW_DOWN, ARROW_LEFT, ARROW_RIGHT, HOME, END, PAGE_UP, PAGE_DOWN).contains(key)) {
             GUI.moveCursor(key);
+        }
+        // press 'ENTER' to create a new line
+        else if (key == ctrl('\r')) {
+            GUI.handleEnter();
+        }
+        // 'DEL'
+        else if (key == DEL) {
+            GUI.deleteRightChar();
+        }
+        // 'BACKSPACE'
+        else if (key == BACKSPACE) {
+            GUI.deleteLeftChar();
         }
         // insert characters
         else {
@@ -683,7 +865,7 @@ final class Keys {
     }
 
     private static void insertChar(char key) {
-
+        GUI.insertCharInLine(key);
     }
 
     /**

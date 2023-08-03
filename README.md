@@ -31,6 +31,8 @@ java -cp jna-5.13.0.jar Viewer.java <fileToOpen>
 
 `Ctrl + F` to enter search mode
 
+`Ctrl + S` to save the file
+
 `ESC` or `ENTER` to exit search mode (`ESC` should be pressed twice)
 
 ## Thanks
