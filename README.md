@@ -14,6 +14,8 @@ depends [Java Native Access](https://github.com/java-native-access/jna) to call 
 - Search through the whole file
 - Support Windows/MacOS/Linux terminal
 
+<img src="https://github.com/domeniczz/Terminal-Based-Text-Editor/blob/master/assets/Animation.gif" width="350rem" style="border-radius:.4rem" float="left" alt="Feature Demo GIF"/><div style="clear:both"></div>
+
 ## Run
 
 Windows Terminal test passed, MacOS and Linux haven't been tested yet
